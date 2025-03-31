@@ -1,17 +1,160 @@
-import type { Express, Request, Response } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { generateSuggestion } from "./openai-service";
+import session from 'express-session';
+import passport from 'passport';
+import { Strategy as LocalStrategy } from 'passport-local';
 import {
   insertCategorySchema,
   insertNoteSchema,
-  insertTaskSchema
+  insertTaskSchema,
+  userLoginSchema,
+  insertUserSchema
 } from "@shared/schema";
 import { z } from "zod";
 import { fromZodError } from "zod-validation-error";
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  // prefix all routes with /api
+  // Set up session middleware
+  app.use(session({
+    secret: process.env.SESSION_SECRET || 'test-secret-key',
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      secure: process.env.NODE_ENV === 'production',
+      maxAge: 24 * 60 * 60 * 1000 // 24 hours
+    }
+  }));
+
+  // Initialize Passport and restore authentication state from session
+  app.use(passport.initialize());
+  app.use(passport.session());
+
+  // Configure Passport local strategy
+  passport.use(new LocalStrategy(async (username, password, done) => {
+    try {
+      const user = await storage.verifyPassword(username, password);
+      if (!user) {
+        return done(null, false, { message: 'Incorrect username or password' });
+      }
+      return done(null, user);
+    } catch (err) {
+      return done(err);
+    }
+  }));
+
+  // Serialize and deserialize user for session management
+  passport.serializeUser((user: any, done) => {
+    done(null, user.id);
+  });
+
+  passport.deserializeUser(async (id: number, done) => {
+    try {
+      const user = await storage.getUser(id);
+      done(null, user);
+    } catch (err) {
+      done(err);
+    }
+  });
+
+  // Authentication middleware for protected routes
+  const isAuthenticated = (req: Request, res: Response, next: NextFunction) => {
+    if (req.isAuthenticated()) {
+      return next();
+    }
+    res.status(401).json({ error: 'Unauthorized' });
+  };
+
+  // Authentication Routes
+  app.post('/api/auth/signup', async (req: Request, res: Response) => {
+    try {
+      const validatedData = insertUserSchema.parse(req.body);
+      
+      // Check if username already exists
+      const existingUser = await storage.getUserByUsername(validatedData.username);
+      if (existingUser) {
+        return res.status(400).json({ error: 'Username already exists' });
+      }
+      
+      const user = await storage.createUser(validatedData);
+      
+      // Remove password from response
+      const { password, ...userWithoutPassword } = user;
+      
+      res.status(201).json(userWithoutPassword);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        const validationError = fromZodError(error);
+        return res.status(400).json({ error: validationError.message });
+      }
+      res.status(500).json({ error: 'Failed to create user' });
+    }
+  });
+
+  app.post('/api/auth/login', (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const validatedData = userLoginSchema.parse(req.body);
+      
+      passport.authenticate('local', (err: Error, user: any, info: any) => {
+        if (err) {
+          return next(err);
+        }
+        if (!user) {
+          return res.status(401).json({ error: info.message || 'Invalid credentials' });
+        }
+        
+        req.logIn(user, (err) => {
+          if (err) {
+            return next(err);
+          }
+          
+          // Remove password from response
+          const { password, ...userWithoutPassword } = user;
+          return res.json(userWithoutPassword);
+        });
+      })(req, res, next);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        const validationError = fromZodError(error);
+        return res.status(400).json({ error: validationError.message });
+      }
+      res.status(500).json({ error: 'Login failed' });
+    }
+  });
+
+  app.post('/api/auth/logout', (req: Request, res: Response) => {
+    req.logout((err) => {
+      if (err) {
+        return res.status(500).json({ error: 'Logout failed' });
+      }
+      res.json({ message: 'Logged out successfully' });
+    });
+  });
+
+  app.get('/api/auth/me', isAuthenticated, (req: Request, res: Response) => {
+    // Remove password from response
+    const { password, ...userWithoutPassword } = req.user as any;
+    res.json(userWithoutPassword);
+  });
+  
+  // User settings
+  app.put('/api/user/settings', isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const userId = (req.user as any).id;
+      const result = await storage.updateUserSettings(userId, req.body);
+      
+      if (!result) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+      
+      // Remove password from response
+      const { password, ...userWithoutPassword } = result;
+      res.json(userWithoutPassword);
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to update user settings' });
+    }
+  });
   
   // Categories API
   app.get("/api/categories", async (req: Request, res: Response) => {
@@ -266,6 +409,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(204).end();
     } catch (error) {
       res.status(500).json({ error: "Failed to delete task" });
+    }
+  });
+
+  // Search History API
+  app.get('/api/search/history', isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const userId = (req.user as any).id;
+      const history = await storage.getSearchHistory(userId);
+      res.json(history);
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to fetch search history' });
+    }
+  });
+  
+  app.post('/api/search/history', isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const userId = (req.user as any).id;
+      const { query, result, isAiQuery } = req.body;
+      
+      if (!query) {
+        return res.status(400).json({ error: 'Query is required' });
+      }
+      
+      const searchHistory = await storage.addSearchHistory({
+        userId,
+        query,
+        result,
+        isAiQuery
+      });
+      
+      res.status(201).json(searchHistory);
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to add search history' });
     }
   });
 
