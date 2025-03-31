@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Sidebar } from './sidebar';
 import { useLocation } from 'wouter';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { ChatAssistant } from './chat-assistant';
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -71,6 +72,9 @@ export function AppLayout({ children }: AppLayoutProps) {
       <main className="flex-1 flex flex-col overflow-hidden bg-gray-50 md:pt-0 pt-14">
         {children}
       </main>
+
+      {/* Geni AI Assistant */}
+      <ChatAssistant />
     </div>
   );
 }

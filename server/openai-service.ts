@@ -4,7 +4,7 @@ import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/ge
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "your-api-key");
 
 export interface AiSuggestionOptions {
-  promptType: "writing" | "task" | "structure";
+  promptType: "writing" | "task" | "structure" | "search";
   currentText: string;
   noteTitle?: string;
   existingTasks?: string[];
@@ -78,6 +78,20 @@ Respond in the following JSON format:
   "confidence": 0.9
 }
 Where confidence is a number between 0 and 1 indicating how confident you are in the suggestion.`;
+        break;
+      case "search":
+        prompt = `You are Geni, a helpful AI assistant for NoteGenius. You help users find information and provide helpful responses about note-taking, productivity, and general questions.
+
+User query: ${options.currentText}
+
+Provide a friendly, helpful, and concise response. If the question is about using NoteGenius, provide relevant guidance.
+
+Respond in the following JSON format:
+{
+  "suggestion": "your response here",
+  "confidence": 0.9
+}
+Where confidence is a number between 0 and 1 indicating how confident you are in the response.`;
         break;
     }
 

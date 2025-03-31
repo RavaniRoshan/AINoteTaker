@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import NotFound from "@/pages/not-found";
 import Home from "@/pages/home";
 import EditorPage from "@/pages/editor";
+import Settings from "@/pages/settings";
 
 function Router() {
   return (
@@ -16,6 +17,7 @@ function Router() {
       <Route path="/favorites" component={Home} />
       <Route path="/tasks" component={Home} />
       <Route path="/trash" component={Home} />
+      <Route path="/settings" component={Settings} />
       <Route component={NotFound} />
     </Switch>
   );
