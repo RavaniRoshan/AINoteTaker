@@ -6,6 +6,7 @@ import NotFound from "@/pages/not-found";
 import Home from "@/pages/home";
 import EditorPage from "@/pages/editor";
 import Settings from "@/pages/settings";
+import { ChatAssistant } from "@/components/chat-assistant";
 
 function Router() {
   return (
@@ -27,6 +28,7 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <Router />
+      <ChatAssistant />
       <Toaster />
     </QueryClientProvider>
   );

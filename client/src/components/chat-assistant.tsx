@@ -61,7 +61,7 @@ export function ChatAssistant() {
       {/* Floating chat button */}
       <button 
         onClick={() => setIsOpen(true)}
-        className="fixed bottom-4 right-4 bg-primary text-white rounded-full w-14 h-14 flex items-center justify-center shadow-lg hover:bg-primary/90 transition-colors z-50"
+        className="chat-assistant-button bg-primary text-white hover:bg-primary/90"
         aria-label="Open chat assistant"
       >
         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-sparkles">
